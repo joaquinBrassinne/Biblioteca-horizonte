@@ -1,0 +1,10 @@
+# Dockerfile para la base de datos PostgreSQL de Biblioteca Horizonte
+FROM postgres:16-alpine
+
+# Variables de entorno por defecto
+ENV POSTGRES_DB=biblioteca_horizonte
+ENV POSTGRES_USER=postgres
+ENV POSTGRES_PASSWORD=postgres
+
+# Puerto expuesto para conexión desde Spring Boot
+EXPOSE 5432
