@@ -196,13 +196,13 @@ Arquitectura desacoplada en dos capas principales comunicadas mediante protocolo
 flowchart TD
     subgraph Frontend["Frontend (React SPA)"]
         UI[Componentes UI React]
-        ServiceLayer[API Client / Fetch]
+        ServiceLayer["API Client / Fetch"]
         UI --> ServiceLayer
     end
 
     subgraph Backend["Backend (Spring Boot)"]
         Controller[REST Controllers]
-        Service[Service / Business Rules]
+        Service["Service / Business Rules"]
         Repository[Spring Data JPA Repositories]
         Controller --> Service
         Service --> Repository
@@ -212,8 +212,8 @@ flowchart TD
         DB[(RDBMS: PostgreSQL / MySQL / H2)]
     end
 
-    ServiceLayer <-->|HTTP / REST (JSON)| Controller
-    Repository <-->|JDBC / Hibernate| DB
+    ServiceLayer <-->|"HTTP / REST (JSON)"| Controller
+    Repository <-->|"JDBC / Hibernate"| DB
 ```
 
 - **Frontend:** Single Page Application (SPA) construida en React. Maneja el estado de la interfaz, presentación visual y consumo de la API REST.
