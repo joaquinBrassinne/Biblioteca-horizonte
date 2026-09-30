@@ -6,9 +6,12 @@ interface ReservaListProps {
   reservas: Reserva[];
   loading: boolean;
   onRefresh: () => void;
-  onConfirmar: (id: number) => Promise<void>;
-  onRechazar: (id: number) => Promise<void>;
+  onConfirmar?: (id: number) => Promise<void>;
+  onRechazar?: (id: number) => Promise<void>;
   processingId: number | null;
+  title?: string;
+  description?: string;
+  showActions?: boolean;
 }
 
 type FilterOption = 'TODAS' | EstadoReserva;
@@ -20,7 +23,11 @@ export const ReservaList: React.FC<ReservaListProps> = ({
   onConfirmar,
   onRechazar,
   processingId,
+  title = 'Listado de Solicitudes',
+  description = 'Visualice el estado en tiempo real y gestione sus solicitudes.',
+  showActions = false,
 }) => {
+
   const [filtro, setFiltro] = useState<FilterOption>('TODAS');
 
   const countPendientes = reservas.filter((r) => r.estado === 'PENDIENTE').length;
@@ -36,10 +43,9 @@ export const ReservaList: React.FC<ReservaListProps> = ({
     <div className="card list-card">
       <div className="card-header list-header">
         <div>
-          <h2 className="card-title">Listado de Solicitudes</h2>
-          <p className="card-description">
-            Visualice el estado en tiempo real y gestione la confirmación o rechazo.
-          </p>
+          <h2 className="card-title">{title}</h2>
+          <p className="card-description">{description}</p>
+
         </div>
         <button
           type="button"
@@ -112,9 +118,11 @@ export const ReservaList: React.FC<ReservaListProps> = ({
               onConfirmar={onConfirmar}
               onRechazar={onRechazar}
               isProcessing={processingId === reserva.id}
+              showActions={showActions}
             />
           ))}
         </div>
+
       )}
     </div>
   );

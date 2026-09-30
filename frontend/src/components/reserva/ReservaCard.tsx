@@ -4,17 +4,20 @@ import { StatusBadge } from '../common/StatusBadge';
 
 interface ReservaCardProps {
   reserva: Reserva;
-  onConfirmar: (id: number) => Promise<void>;
-  onRechazar: (id: number) => Promise<void>;
-  isProcessing: boolean;
+  onConfirmar?: (id: number) => Promise<void>;
+  onRechazar?: (id: number) => Promise<void>;
+  isProcessing?: boolean;
+  showActions?: boolean;
 }
 
 export const ReservaCard: React.FC<ReservaCardProps> = ({
   reserva,
   onConfirmar,
   onRechazar,
-  isProcessing,
+  isProcessing = false,
+  showActions = false,
 }) => {
+
   const isPendiente = reserva.estado === 'PENDIENTE';
   const isConfirmada = reserva.estado === 'CONFIRMADA';
   const isRechazada = reserva.estado === 'RECHAZADA';
@@ -58,7 +61,7 @@ export const ReservaCard: React.FC<ReservaCardProps> = ({
           Registrada: {new Date(reserva.fechaCreacion).toLocaleString()}
         </div>
 
-        {isPendiente && (
+        {isPendiente && showActions && onConfirmar && onRechazar && (
           <div className="reserva-actions">
             <button
               type="button"

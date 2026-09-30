@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CrearReservaDTO, Equipo } from '../../types/reserva';
+import { useAuth } from '../../context/AuthContext';
 
 interface ReservaFormProps {
   equipos: Equipo[];
@@ -22,21 +23,21 @@ export const ReservaForm: React.FC<ReservaFormProps> = ({
   onSubmit,
   isSubmitting,
 }) => {
-  const [docenteId, setDocenteId] = useState<string>('1');
+  const { usuario } = useAuth();
   const [equipoId, setEquipoId] = useState<string>('');
   const [fecha, setFecha] = useState<string>('');
   const [modulo, setModulo] = useState<string>('M1');
   const [formError, setFormError] = useState<string | null>(null);
+
+  // El docenteId se infiere de la sesión activa del docente
+  const activeDocenteId = usuario?.docenteId || 1;
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
     // Validación básica de formulario requerida
-    if (!docenteId || Number(docenteId) <= 0) {
-      setFormError('Por favor, ingrese un identificador de docente válido.');
-      return;
-    }
     if (!equipoId || Number(equipoId) <= 0) {
       setFormError('Debe seleccionar un equipo para la solicitud.');
       return;
@@ -51,7 +52,7 @@ export const ReservaForm: React.FC<ReservaFormProps> = ({
     }
 
     const dto: CrearReservaDTO = {
-      docenteId: Number(docenteId),
+      docenteId: activeDocenteId,
       equipoId: Number(equipoId),
       fecha,
       modulo,
@@ -84,24 +85,19 @@ export const ReservaForm: React.FC<ReservaFormProps> = ({
 
       <form onSubmit={handleSubmit} className="reserva-form" noValidate>
         <div className="form-grid">
-          {/* Docente ID */}
+          {/* Docente Solicitante (Inmutable, ligado a la sesión activa) */}
           <div className="form-group">
-            <label htmlFor="docenteId" className="form-label">
-              ID / Legajo de Docente <span className="required">*</span>
+            <label className="form-label">
+              Docente Solicitante
             </label>
-            <input
-              id="docenteId"
-              type="number"
-              min="1"
-              className="form-input"
-              value={docenteId}
-              onChange={(e) => setDocenteId(e.target.value)}
-              placeholder="Ej: 1"
-              required
-              disabled={isSubmitting}
-            />
-            <span className="form-hint">Identificador único del solicitante</span>
+            <div className="session-user-display" data-testid="docente-solicitante-info">
+              <span className="user-indicator-dot"></span>
+              <strong>{usuario?.nombreCompleto || `Docente #${activeDocenteId}`}</strong>
+              <span className="form-hint-inline">(Legajo #{activeDocenteId})</span>
+            </div>
+            <span className="form-hint">Asignado automáticamente por la identidad autenticada</span>
           </div>
+
 
           {/* Equipo */}
           <div className="form-group">

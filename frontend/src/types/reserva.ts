@@ -32,3 +32,17 @@ export interface ApiErrorResponse {
   path?: string;
   validaciones?: Record<string, string> | null;
 }
+
+export type RolUsuario = 'ROLE_DOCENTE' | 'ROLE_BIBLIOTECARIA';
+
+export interface UsuarioAutenticado {
+  username: string;
+  nombreCompleto: string;
+  rol: RolUsuario;
+  docenteId?: number;
+}
+
+export interface FiltroConfirmadasDTO {
+  equipoId?: number;
+  fecha?: string;
+}

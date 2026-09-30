@@ -2,6 +2,41 @@ import { ApiErrorResponse } from '../types/reserva';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
+let currentAuthHeader: string | null = null;
+
+export const setAuthCredentials = (username: string, password: string): string => {
+  const token = btoa(`${username}:${password}`);
+  currentAuthHeader = `Basic ${token}`;
+  try {
+    sessionStorage.setItem('bh_auth_token', currentAuthHeader);
+    sessionStorage.setItem('bh_auth_user', username);
+  } catch {
+    // Entorno sin sessionStorage (ej. tests)
+  }
+  return currentAuthHeader;
+};
+
+export const clearAuthCredentials = (): void => {
+  currentAuthHeader = null;
+  try {
+    sessionStorage.removeItem('bh_auth_token');
+    sessionStorage.removeItem('bh_auth_user');
+  } catch {
+    // Ignorar si no está disponible
+  }
+};
+
+export const getAuthCredentials = (): string | null => {
+  if (!currentAuthHeader) {
+    try {
+      currentAuthHeader = sessionStorage.getItem('bh_auth_token');
+    } catch {
+      // Ignorar
+    }
+  }
+  return currentAuthHeader;
+};
+
 export class ApiError extends Error {
   status: number;
   codigo?: string;
@@ -18,10 +53,13 @@ export class ApiError extends Error {
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  const headers = {
+  const auth = getAuthCredentials();
+
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    ...options.headers,
+    ...(auth ? { Authorization: auth } : {}),
+    ...((options.headers as Record<string, string>) || {}),
   };
 
   try {
@@ -42,6 +80,19 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
           mensaje: `Error en la solicitud (${response.status}: ${response.statusText})`,
         };
       }
+
+      // Tratamiento específico de mensajes claros según código HTTP
+      if (response.status === 401) {
+        errorBody.mensaje =
+          errorBody.mensaje || 'La sesión o autenticación no es válida. Inicie sesión con credenciales correctas.';
+      } else if (response.status === 403) {
+        errorBody.mensaje =
+          errorBody.mensaje || 'No tiene permisos para realizar esta operación o acceder a esta información.';
+      } else if (response.status === 409) {
+        errorBody.mensaje =
+          errorBody.mensaje || 'Conflicto de reserva: el slot ya está confirmado o la transición de estado no es válida.';
+      }
+
       throw new ApiError(errorBody);
     }
 
@@ -72,3 +123,4 @@ export const apiClient = {
       body: body ? JSON.stringify(body) : undefined,
     }),
 };
+
