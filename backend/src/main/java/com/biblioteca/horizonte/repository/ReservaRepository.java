@@ -21,4 +21,12 @@ public interface ReservaRepository extends JpaRepository<Reserva, Long> {
     List<Reserva> findByDocenteId(Long docenteId);
 
     List<Reserva> findByFecha(LocalDate fecha);
+
+    List<Reserva> findByEquipoIdAndFechaAndEstado(Long equipoId, LocalDate fecha, EstadoReserva estado);
+
+    List<Reserva> findByFechaAndEstado(LocalDate fecha, EstadoReserva estado);
+
+    List<Reserva> findByEquipoIdAndEstado(Long equipoId, EstadoReserva estado);
+
+    List<Reserva> findByEstado(EstadoReserva estado);
 }

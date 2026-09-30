@@ -281,6 +281,183 @@ class ReservaControllerIntegrationTest {
     }
 
     // =========================================================================
+    // CP10 — DOCENTE consulta sus propias solicitudes
+    // =========================================================================
+
+    @Test
+    @DisplayName("CP10: DOCENTE A consulta sus propias solicitudes en /mis-solicitudes → 200 OK, solo ve las suyas")
+    void cp10_docenteConsultaSusPropiasSolicitudes() throws Exception {
+        // Docente 1 crea reserva
+        Long idReservaDocente1 = crearReservaComoDocente(equipoId, LocalDate.of(2026, 12, 1), "M1");
+        // Docente 2 crea reserva
+        Long idReservaDocente2 = crearReservaComoDocente2(equipoId, LocalDate.of(2026, 12, 2), "M2");
+
+        // Docente 1 consulta /mis-solicitudes
+        mockMvc.perform(get("/api/v1/reservas/mis-solicitudes")
+                        .with(httpBasic("docente", "docente123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id", is(idReservaDocente1.intValue())))
+                .andExpect(jsonPath("$[0].docenteId", is(1)));
+
+        // Docente 2 consulta /mis-solicitudes
+        mockMvc.perform(get("/api/v1/reservas/mis-solicitudes")
+                        .with(httpBasic("docente2", "docente123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id", is(idReservaDocente2.intValue())))
+                .andExpect(jsonPath("$[0].docenteId", is(2)));
+    }
+
+    @Test
+    @DisplayName("CP10: DOCENTE A consulta /api/v1/reservas → 200 OK, filtrado automático a sus solicitudes")
+    void cp10_docenteConsultaReservasGeneralesSoloVeLasSuyas() throws Exception {
+        Long idReservaDocente1 = crearReservaComoDocente(equipoId, LocalDate.of(2026, 12, 3), "M1");
+        crearReservaComoDocente2(equipoId, LocalDate.of(2026, 12, 4), "M2");
+
+        mockMvc.perform(get("/api/v1/reservas")
+                        .with(httpBasic("docente", "docente123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id", is(idReservaDocente1.intValue())))
+                .andExpect(jsonPath("$[0].docenteId", is(1)));
+    }
+
+    // =========================================================================
+    // CP11 — DOCENTE NO puede consultar solicitudes pertenecientes a otro docente
+    // =========================================================================
+
+    @Test
+    @DisplayName("CP11: DOCENTE 1 intenta acceder a detalle de solicitud de DOCENTE 2 → 403 Forbidden")
+    void cp11_docenteNoPuedeAccederADetalleDeOtroDocente() throws Exception {
+        Long idReservaDocente2 = crearReservaComoDocente2(equipoId, LocalDate.of(2026, 12, 5), "M3");
+
+        mockMvc.perform(get("/api/v1/reservas/" + idReservaDocente2)
+                        .with(httpBasic("docente", "docente123")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status", is(403)))
+                .andExpect(jsonPath("$.codigo", is("ACCESO_DENEGADO")));
+    }
+
+    @Test
+    @DisplayName("CP11: DOCENTE 1 intenta consultar solicitudes de DOCENTE 2 via parámetro ?docenteId=2 → 403 Forbidden")
+    void cp11_docenteNoPuedeFiltrarPorIdDeOtroDocente() throws Exception {
+        crearReservaComoDocente2(equipoId, LocalDate.of(2026, 12, 6), "M4");
+
+        mockMvc.perform(get("/api/v1/reservas")
+                        .param("docenteId", "2")
+                        .with(httpBasic("docente", "docente123")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status", is(403)))
+                .andExpect(jsonPath("$.codigo", is("ACCESO_DENEGADO")));
+    }
+
+    @Test
+    @DisplayName("CP11: BIBLIOTECARIA puede consultar cualquier solicitud (acceso administrativo) → 200 OK")
+    void cp11_bibliotecariaPuedeConsultarCualquierSolicitud() throws Exception {
+        Long idReservaDocente1 = crearReservaComoDocente(equipoId, LocalDate.of(2026, 12, 7), "M5");
+
+        mockMvc.perform(get("/api/v1/reservas/" + idReservaDocente1)
+                        .with(httpBasic("bibliotecaria", "biblio123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(idReservaDocente1.intValue())))
+                .andExpect(jsonPath("$.docenteId", is(1)));
+    }
+
+    @Test
+    @DisplayName("CP11: Usuario no autenticado que intenta consultar /mis-solicitudes → 401 Unauthorized")
+    void cp11_usuarioNoAutenticadoEnMisSolicitudesRetorna401() throws Exception {
+        mockMvc.perform(get("/api/v1/reservas/mis-solicitudes"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status", is(401)))
+                .andExpect(jsonPath("$.codigo", is("NO_AUTENTICADO")));
+    }
+
+    @Test
+    @DisplayName("CP11: BIBLIOTECARIA intenta acceder a /mis-solicitudes → 403 Forbidden (rol docente requerido)")
+    void cp11_bibliotecariaEnMisSolicitudesRetorna403() throws Exception {
+        mockMvc.perform(get("/api/v1/reservas/mis-solicitudes")
+                        .with(httpBasic("bibliotecaria", "biblio123")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status", is(403)))
+                .andExpect(jsonPath("$.codigo", is("ACCESO_DENEGADO")));
+    }
+
+    // =========================================================================
+    // CP14 — Consulta de disponibilidad y reservas CONFIRMADAS por recurso y fecha
+    // =========================================================================
+
+    @Test
+    @DisplayName("CP14: Consulta de reservas CONFIRMADAS por recurso y fecha → solo retorna CONFIRMADAS")
+    void cp14_consultaReservasConfirmadasPorRecursoYFecha() throws Exception {
+        LocalDate fecha = LocalDate.of(2026, 12, 10);
+
+        // 1. Solicitud confirmada para equipoId en fecha
+        Long idConfirmada = crearReservaComoDocente(equipoId, fecha, "M1");
+        mockMvc.perform(post("/api/v1/reservas/" + idConfirmada + "/confirmar")
+                        .with(httpBasic("bibliotecaria", "biblio123")))
+                .andExpect(status().isOk());
+
+        // 2. Solicitud que queda PENDIENTE para mismo equipoId y fecha
+        crearReservaComoDocente(equipoId, fecha, "M2");
+
+        // 3. Solicitud que queda RECHAZADA para mismo equipoId y fecha
+        Long idRechazada = crearReservaComoDocente(equipoId, fecha, "M3");
+        mockMvc.perform(post("/api/v1/reservas/" + idRechazada + "/rechazar")
+                        .with(httpBasic("bibliotecaria", "biblio123")))
+                .andExpect(status().isOk());
+
+        // 4. Solicitud confirmada para OTRA fecha
+        Long idOtraFecha = crearReservaComoDocente(equipoId, LocalDate.of(2026, 12, 15), "M1");
+        mockMvc.perform(post("/api/v1/reservas/" + idOtraFecha + "/confirmar")
+                        .with(httpBasic("bibliotecaria", "biblio123")))
+                .andExpect(status().isOk());
+
+        // Consultar confirmadas filtrando por equipoId y fecha
+        mockMvc.perform(get("/api/v1/reservas/confirmadas")
+                        .param("equipoId", equipoId.toString())
+                        .param("fecha", "2026-12-10")
+                        .with(httpBasic("docente", "docente123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id", is(idConfirmada.intValue())))
+                .andExpect(jsonPath("$[0].estado", is("CONFIRMADA")))
+                .andExpect(jsonPath("$[0].modulo", is("M1")))
+                .andExpect(jsonPath("$[0].fecha", is("2026-12-10")));
+    }
+
+    @Test
+    @DisplayName("CP14: Consulta de reservas CONFIRMADAS solo por fecha → retorna confirmadas de esa fecha")
+    void cp14_consultaReservasConfirmadasSoloPorFecha() throws Exception {
+        LocalDate fecha = LocalDate.of(2026, 12, 20);
+
+        Long idConf = crearReservaComoDocente(equipoId, fecha, "M1");
+        mockMvc.perform(post("/api/v1/reservas/" + idConf + "/confirmar")
+                        .with(httpBasic("bibliotecaria", "biblio123")))
+                .andExpect(status().isOk());
+
+        // Solicitud pendiente en la misma fecha no debe salir
+        crearReservaComoDocente(equipoId, fecha, "M2");
+
+        mockMvc.perform(get("/api/v1/reservas/confirmadas")
+                        .param("fecha", "2026-12-20")
+                        .with(httpBasic("docente", "docente123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].estado", is("CONFIRMADA")))
+                .andExpect(jsonPath("$[0].id", is(idConf.intValue())));
+    }
+
+    @Test
+    @DisplayName("CP14: Consulta de reservas confirmadas sin autenticación → 401 Unauthorized")
+    void cp14_consultaConfirmadasSinAutenticacionRetorna401() throws Exception {
+        mockMvc.perform(get("/api/v1/reservas/confirmadas"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status", is(401)))
+                .andExpect(jsonPath("$.codigo", is("NO_AUTENTICADO")));
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
 
@@ -293,6 +470,25 @@ class ReservaControllerIntegrationTest {
 
         MvcResult result = mockMvc.perform(post("/api/v1/reservas")
                         .with(httpBasic("docente", "docente123"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        return ((Number) com.jayway.jsonpath.JsonPath
+                .read(result.getResponse().getContentAsString(), "$.id"))
+                .longValue();
+    }
+
+    /**
+     * Crea una reserva autenticando via HTTP Basic con las credenciales de docente2.
+     * Retorna el ID de la reserva creada.
+     */
+    private Long crearReservaComoDocente2(Long equipoId, LocalDate fecha, String modulo) throws Exception {
+        CrearReservaRequest req = new CrearReservaRequest(2L, equipoId, fecha, modulo);
+
+        MvcResult result = mockMvc.perform(post("/api/v1/reservas")
+                        .with(httpBasic("docente2", "docente123"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isCreated())

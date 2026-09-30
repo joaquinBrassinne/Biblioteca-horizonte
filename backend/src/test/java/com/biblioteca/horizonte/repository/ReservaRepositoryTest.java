@@ -53,4 +53,30 @@ class ReservaRepositoryTest {
         List<Reserva> docenteReservas = reservaRepository.findByDocenteId(1L);
         assertThat(docenteReservas).isNotEmpty();
     }
+
+    @Test
+    void shouldFilterConfirmedReservasByEquipoAndFecha() {
+        Equipo equipo = equipoRepository.save(new Equipo("Notebook Test"));
+        LocalDate fecha = LocalDate.of(2026, 10, 20);
+
+        // Reserva CONFIRMADA
+        Reserva confirmada = new Reserva(null, 1L, equipo, fecha, "M1", EstadoReserva.CONFIRMADA, LocalDateTime.now());
+        reservaRepository.save(confirmada);
+
+        // Reserva PENDIENTE mismo equipo y fecha
+        Reserva pendiente = new Reserva(null, 2L, equipo, fecha, "M2", EstadoReserva.PENDIENTE, LocalDateTime.now());
+        reservaRepository.save(pendiente);
+
+        // Reserva CONFIRMADA otra fecha
+        Reserva otraFecha = new Reserva(null, 1L, equipo, LocalDate.of(2026, 10, 21), "M1", EstadoReserva.CONFIRMADA, LocalDateTime.now());
+        reservaRepository.save(otraFecha);
+
+        List<Reserva> resultado = reservaRepository.findByEquipoIdAndFechaAndEstado(equipo.getId(), fecha, EstadoReserva.CONFIRMADA);
+        assertThat(resultado).hasSize(1);
+        assertThat(resultado.get(0).getEstado()).isEqualTo(EstadoReserva.CONFIRMADA);
+        assertThat(resultado.get(0).getModulo()).isEqualTo("M1");
+
+        List<Reserva> soloFecha = reservaRepository.findByFechaAndEstado(fecha, EstadoReserva.CONFIRMADA);
+        assertThat(soloFecha).hasSize(1);
+    }
 }

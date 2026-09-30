@@ -4,6 +4,7 @@ import com.biblioteca.horizonte.dto.response.EquipoResponse;
 import com.biblioteca.horizonte.repository.EquipoRepository;
 import com.biblioteca.horizonte.service.EquipoService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -17,6 +18,7 @@ public class EquipoServiceImpl implements EquipoService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<EquipoResponse> listarEquipos() {
         return equipoRepository.findAll().stream()
                 .map(e -> new EquipoResponse(e.getId(), e.getNombre()))

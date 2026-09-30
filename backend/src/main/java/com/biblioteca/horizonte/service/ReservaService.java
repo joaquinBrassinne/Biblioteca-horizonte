@@ -11,6 +11,10 @@ public interface ReservaService {
 
     List<ReservaResponse> listarTodas();
 
+    List<ReservaResponse> listarMisSolicitudes(Long docenteId);
+
+    List<ReservaResponse> listarConfirmadas(Long equipoId, java.time.LocalDate fecha);
+
     ReservaResponse obtenerPorId(Long id);
 
     ReservaResponse confirmarSolicitud(Long id);
