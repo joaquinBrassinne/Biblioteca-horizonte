@@ -1,6 +1,9 @@
 import React from 'react';
+import { useAuth } from '../../context/AuthContext';
 
 export const Navbar: React.FC = () => {
+  const { usuario, logout } = useAuth();
+
   return (
     <header className="navbar">
       <div className="navbar-container">
@@ -15,10 +18,36 @@ export const Navbar: React.FC = () => {
             <p className="navbar-subtitle">Gestión de Solicitudes de Reserva de Equipos</p>
           </div>
         </div>
-        <div className="navbar-badges">
-          <span className="navbar-tag">MVP v1.0</span>
+
+        <div className="navbar-actions">
+          {usuario ? (
+            <div className="user-session-bar" data-testid="user-session-bar">
+              <div className="user-info-chip">
+                <span className={`role-badge ${usuario.rol === 'ROLE_BIBLIOTECARIA' ? 'role-biblio' : 'role-docente'}`}>
+                  {usuario.rol === 'ROLE_BIBLIOTECARIA' ? 'BIBLIOTECARIA' : 'DOCENTE'}
+                </span>
+                <span className="user-name" data-testid="authenticated-user-name">
+                  {usuario.nombreCompleto}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-logout"
+                onClick={logout}
+                title="Cerrar sesión actual"
+                data-testid="logout-btn"
+              >
+                Cerrar Sesión
+              </button>
+            </div>
+          ) : (
+            <div className="navbar-badges">
+              <span className="navbar-tag">Sesión no iniciada</span>
+            </div>
+          )}
         </div>
       </div>
     </header>
   );
 };
+

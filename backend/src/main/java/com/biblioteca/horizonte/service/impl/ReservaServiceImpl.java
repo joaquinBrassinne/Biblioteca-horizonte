@@ -15,6 +15,7 @@ import com.biblioteca.horizonte.security.DocenteResolver;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import com.biblioteca.horizonte.service.AuditoriaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,19 +30,29 @@ public class ReservaServiceImpl implements ReservaService {
     private final ReservaRepository reservaRepository;
     private final EquipoRepository equipoRepository;
     private final DocenteResolver docenteResolver;
+    private final AuditoriaService auditoriaService;
 
     public ReservaServiceImpl(ReservaRepository reservaRepository, EquipoRepository equipoRepository) {
-        this(reservaRepository, equipoRepository, new DocenteResolver());
+        this(reservaRepository, equipoRepository, new DocenteResolver(), null);
+    }
+
+    public ReservaServiceImpl(ReservaRepository reservaRepository,
+                              EquipoRepository equipoRepository,
+                              DocenteResolver docenteResolver) {
+        this(reservaRepository, equipoRepository, docenteResolver, null);
     }
 
     @Autowired
     public ReservaServiceImpl(ReservaRepository reservaRepository,
                               EquipoRepository equipoRepository,
-                              DocenteResolver docenteResolver) {
+                              DocenteResolver docenteResolver,
+                              AuditoriaService auditoriaService) {
         this.reservaRepository = reservaRepository;
         this.equipoRepository = equipoRepository;
         this.docenteResolver = docenteResolver != null ? docenteResolver : new DocenteResolver();
+        this.auditoriaService = auditoriaService;
     }
+
 
     @Override
     @Transactional
@@ -167,6 +178,11 @@ public class ReservaServiceImpl implements ReservaService {
 
         reserva.setEstado(EstadoReserva.CONFIRMADA);
         Reserva actualizada = reservaRepository.save(reserva);
+
+        if (auditoriaService != null) {
+            auditoriaService.registrarAuditoria(actualizada, "CONFIRMAR", "EXITOSO");
+        }
+
         return mapToResponse(actualizada);
     }
 
@@ -185,8 +201,14 @@ public class ReservaServiceImpl implements ReservaService {
 
         reserva.setEstado(EstadoReserva.RECHAZADA);
         Reserva actualizada = reservaRepository.save(reserva);
+
+        if (auditoriaService != null) {
+            auditoriaService.registrarAuditoria(actualizada, "RECHAZAR", "EXITOSO");
+        }
+
         return mapToResponse(actualizada);
     }
+
 
     private ReservaResponse mapToResponse(Reserva reserva) {
         return new ReservaResponse(

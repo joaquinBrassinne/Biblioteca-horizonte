@@ -53,11 +53,18 @@ class ReservaControllerIntegrationTest {
     @Autowired
     private EquipoRepository equipoRepository;
 
+    @Autowired(required = false)
+    private com.biblioteca.horizonte.repository.AuditoriaReservaRepository auditoriaReservaRepository;
+
     private Long equipoId;
 
     @BeforeEach
     void setUp() {
+        if (auditoriaReservaRepository != null) {
+            auditoriaReservaRepository.deleteAll();
+        }
         reservaRepository.deleteAll();
+
         Equipo equipo = equipoRepository.findAll().stream().findFirst().orElseGet(() -> {
             Equipo nuevo = new Equipo("Proyector EPSON Aula Magna");
             return equipoRepository.save(nuevo);

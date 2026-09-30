@@ -34,8 +34,12 @@ public class Reserva {
     @Column(name = "fecha_creacion", nullable = false)
     private LocalDateTime fechaCreacion;
 
+    @OneToMany(mappedBy = "reserva", cascade = CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<AuditoriaReserva> auditorias = new java.util.ArrayList<>();
+
     public Reserva() {
     }
+
 
     public Reserva(Long id, Long docenteId, Equipo equipo, LocalDate fecha, String modulo, EstadoReserva estado, LocalDateTime fechaCreacion) {
         this.id = id;
@@ -102,4 +106,13 @@ public class Reserva {
     public void setFechaCreacion(LocalDateTime fechaCreacion) {
         this.fechaCreacion = fechaCreacion;
     }
+
+    public java.util.List<AuditoriaReserva> getAuditorias() {
+        return auditorias;
+    }
+
+    public void setAuditorias(java.util.List<AuditoriaReserva> auditorias) {
+        this.auditorias = auditorias;
+    }
 }
+

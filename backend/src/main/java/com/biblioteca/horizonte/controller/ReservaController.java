@@ -18,22 +18,34 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.time.LocalDate;
 import java.util.List;
 
+import com.biblioteca.horizonte.dto.response.AuditoriaResponse;
+import com.biblioteca.horizonte.service.AuditoriaService;
+
 @RestController
 @RequestMapping("/api/v1/reservas")
 public class ReservaController {
 
     private final ReservaService reservaService;
     private final DocenteResolver docenteResolver;
+    private final AuditoriaService auditoriaService;
 
     public ReservaController(ReservaService reservaService) {
-        this(reservaService, new DocenteResolver());
+        this(reservaService, new DocenteResolver(), null);
+    }
+
+    public ReservaController(ReservaService reservaService, DocenteResolver docenteResolver) {
+        this(reservaService, docenteResolver, null);
     }
 
     @Autowired
-    public ReservaController(ReservaService reservaService, DocenteResolver docenteResolver) {
+    public ReservaController(ReservaService reservaService,
+                             DocenteResolver docenteResolver,
+                             AuditoriaService auditoriaService) {
         this.reservaService = reservaService;
         this.docenteResolver = docenteResolver != null ? docenteResolver : new DocenteResolver();
+        this.auditoriaService = auditoriaService;
     }
+
 
     @PostMapping
     public ResponseEntity<ReservaResponse> crearSolicitud(
@@ -98,4 +110,14 @@ public class ReservaController {
     public ResponseEntity<ReservaResponse> rechazarSolicitud(@PathVariable Long id) {
         return ResponseEntity.ok(reservaService.rechazarSolicitud(id));
     }
+
+    @GetMapping("/{id}/auditoria")
+    @PreAuthorize("hasRole('BIBLIOTECARIA')")
+    public ResponseEntity<List<AuditoriaResponse>> obtenerAuditoria(@PathVariable Long id) {
+        if (auditoriaService == null) {
+            return ResponseEntity.ok(List.of());
+        }
+        return ResponseEntity.ok(auditoriaService.obtenerPorReservaId(id));
+    }
 }
+
