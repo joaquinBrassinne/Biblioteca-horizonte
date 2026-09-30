@@ -1,4 +1,4 @@
-package com.biblioteca.horizonte.integration;
+﻿package com.biblioteca.horizonte.integration;
 
 import com.biblioteca.horizonte.dto.request.CrearReservaRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.time.LocalDate;
 
 import static org.hamcrest.Matchers.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -44,6 +45,7 @@ public class ReservaIntegrationTest {
         CrearReservaRequest req1 = new CrearReservaRequest(docente1, equipoId, fecha, modulo);
 
         MvcResult res1 = mockMvc.perform(post("/api/v1/reservas")
+                        .with(httpBasic("docente", "docente123"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req1)))
                 .andExpect(status().isCreated())
@@ -59,7 +61,8 @@ public class ReservaIntegrationTest {
         // ==========================================
         // CASO 2: Confirmar la primera solicitud
         // ==========================================
-        mockMvc.perform(post("/api/v1/reservas/{id}/confirmar", reserva1Id))
+        mockMvc.perform(post("/api/v1/reservas/{id}/confirmar", reserva1Id)
+                        .with(httpBasic("bibliotecaria", "biblio123")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(reserva1Id))
                 .andExpect(jsonPath("$.estado").value("CONFIRMADA"));
@@ -70,6 +73,7 @@ public class ReservaIntegrationTest {
         CrearReservaRequest req2 = new CrearReservaRequest(docente2, equipoId, fecha, modulo);
 
         MvcResult res2 = mockMvc.perform(post("/api/v1/reservas")
+                        .with(httpBasic("docente2", "docente123"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req2)))
                 .andExpect(status().isCreated())
@@ -80,26 +84,30 @@ public class ReservaIntegrationTest {
         Long reserva2Id = objectMapper.readTree(res2.getResponse().getContentAsString()).get("id").asLong();
 
         // Intentar CONFIRMAR la segunda solicitud -> Debe fallar con 409 Conflict por regla fundamental RN-001
-        mockMvc.perform(post("/api/v1/reservas/{id}/confirmar", reserva2Id))
+        mockMvc.perform(post("/api/v1/reservas/{id}/confirmar", reserva2Id)
+                        .with(httpBasic("bibliotecaria", "biblio123")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.codigo").value("RESERVA_COLISION_CONFIRMADA"))
                 .andExpect(jsonPath("$.mensaje", containsString("Ya existe otra reserva confirmada")));
 
-        // Verificar que la segunda reserva permanezca en PENDIENTE y NO se haya confirmado
-        mockMvc.perform(get("/api/v1/reservas/{id}", reserva2Id))
+        // Verificar que la segunda reserva permanezca en PENDIENTE y NO se haya confirmado (acceso como bibliotecaria)
+        mockMvc.perform(get("/api/v1/reservas/{id}", reserva2Id)
+                        .with(httpBasic("bibliotecaria", "biblio123")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.estado").value("PENDIENTE"));
 
         // ==========================================
         // CASO 4: Rechazar la segunda solicitud
         // ==========================================
-        mockMvc.perform(post("/api/v1/reservas/{id}/rechazar", reserva2Id))
+        mockMvc.perform(post("/api/v1/reservas/{id}/rechazar", reserva2Id)
+                        .with(httpBasic("bibliotecaria", "biblio123")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.estado").value("RECHAZADA"));
 
         // Intentar confirmar una solicitud ya RECHAZADA -> 409 Conflict por transición inválida
-        mockMvc.perform(post("/api/v1/reservas/{id}/confirmar", reserva2Id))
+        mockMvc.perform(post("/api/v1/reservas/{id}/confirmar", reserva2Id)
+                        .with(httpBasic("bibliotecaria", "biblio123")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.codigo").value("TRANSICION_ESTADO_INVALIDA"));
     }

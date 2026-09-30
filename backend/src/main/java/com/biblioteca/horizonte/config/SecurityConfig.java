@@ -74,10 +74,12 @@ public class SecurityConfig {
                 // PROTEGIDO: confirmar y rechazar solo BIBLIOTECARIA
                 .requestMatchers(HttpMethod.POST, "/api/v1/reservas/*/confirmar").hasRole("BIBLIOTECARIA")
                 .requestMatchers(HttpMethod.POST, "/api/v1/reservas/*/rechazar").hasRole("BIBLIOTECARIA")
-                // Crear una solicitud requiere estar autenticado (cualquier rol)
+                // Mis solicitudes solo para DOCENTE
+                .requestMatchers(HttpMethod.GET, "/api/v1/reservas/mis-solicitudes").hasRole("DOCENTE")
+                // Crear una solicitud requiere estar autenticado
                 .requestMatchers(HttpMethod.POST, "/api/v1/reservas").authenticated()
                 // Listar/obtener reservas requiere autenticación
-                .requestMatchers(HttpMethod.GET, "/api/v1/reservas/**").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/v1/reservas", "/api/v1/reservas/**").authenticated()
                 // Cualquier otro endpoint requiere autenticación
                 .anyRequest().authenticated()
             )
@@ -102,13 +104,25 @@ public class SecurityConfig {
                 .roles("DOCENTE")
                 .build();
 
+        var docente1 = User.builder()
+                .username("docente1")
+                .password(passwordEncoder.encode("docente123"))
+                .roles("DOCENTE")
+                .build();
+
+        var docente2 = User.builder()
+                .username("docente2")
+                .password(passwordEncoder.encode("docente123"))
+                .roles("DOCENTE")
+                .build();
+
         var bibliotecaria = User.builder()
                 .username("bibliotecaria")
                 .password(passwordEncoder.encode("biblio123"))
                 .roles("BIBLIOTECARIA")
                 .build();
 
-        return new InMemoryUserDetailsManager(docente, bibliotecaria);
+        return new InMemoryUserDetailsManager(docente, docente1, docente2, bibliotecaria);
     }
 
     @Bean

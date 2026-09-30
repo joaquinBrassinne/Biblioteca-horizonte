@@ -11,9 +11,15 @@ import com.biblioteca.horizonte.exception.ResourceNotFoundException;
 import com.biblioteca.horizonte.repository.EquipoRepository;
 import com.biblioteca.horizonte.repository.ReservaRepository;
 import com.biblioteca.horizonte.service.ReservaService;
+import com.biblioteca.horizonte.security.DocenteResolver;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -22,19 +28,27 @@ public class ReservaServiceImpl implements ReservaService {
 
     private final ReservaRepository reservaRepository;
     private final EquipoRepository equipoRepository;
+    private final DocenteResolver docenteResolver;
 
     public ReservaServiceImpl(ReservaRepository reservaRepository, EquipoRepository equipoRepository) {
+        this(reservaRepository, equipoRepository, new DocenteResolver());
+    }
+
+    @Autowired
+    public ReservaServiceImpl(ReservaRepository reservaRepository,
+                              EquipoRepository equipoRepository,
+                              DocenteResolver docenteResolver) {
         this.reservaRepository = reservaRepository;
         this.equipoRepository = equipoRepository;
+        this.docenteResolver = docenteResolver != null ? docenteResolver : new DocenteResolver();
     }
 
     @Override
     @Transactional
     public ReservaResponse crearSolicitud(CrearReservaRequest request) {
         Equipo equipo = equipoRepository.findById(request.getEquipoId())
-                .orElseThrow(() -> new ResourceNotFoundException("No se encontró el equipo con ID " + request.getEquipoId()));
+                .orElseThrow(() -> new ResourceNotFoundException("El equipo con ID " + request.getEquipoId() + " no existe."));
 
-        // Regla RN-002: Estado inicial siempre PENDIENTE
         Reserva reserva = new Reserva();
         reserva.setDocenteId(request.getDocenteId());
         reserva.setEquipo(equipo);
@@ -50,7 +64,47 @@ public class ReservaServiceImpl implements ReservaService {
     @Override
     @Transactional(readOnly = true)
     public List<ReservaResponse> listarTodas() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated()) {
+            boolean esDocente = auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_DOCENTE"));
+            boolean esBibliotecaria = auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_BIBLIOTECARIA"));
+
+            if (esDocente && !esBibliotecaria) {
+                Long docenteId = docenteResolver.resolverDocenteId(auth.getName());
+                return listarMisSolicitudes(docenteId);
+            }
+        }
+
         return reservaRepository.findAll().stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ReservaResponse> listarMisSolicitudes(Long docenteId) {
+        return reservaRepository.findByDocenteId(docenteId).stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ReservaResponse> listarConfirmadas(Long equipoId, LocalDate fecha) {
+        List<Reserva> reservas;
+        if (equipoId != null && fecha != null) {
+            reservas = reservaRepository.findByEquipoIdAndFechaAndEstado(equipoId, fecha, EstadoReserva.CONFIRMADA);
+        } else if (fecha != null) {
+            reservas = reservaRepository.findByFechaAndEstado(fecha, EstadoReserva.CONFIRMADA);
+        } else if (equipoId != null) {
+            reservas = reservaRepository.findByEquipoIdAndEstado(equipoId, EstadoReserva.CONFIRMADA);
+        } else {
+            reservas = reservaRepository.findByEstado(EstadoReserva.CONFIRMADA);
+        }
+
+        return reservas.stream()
                 .map(this::mapToResponse)
                 .toList();
     }
@@ -59,17 +113,37 @@ public class ReservaServiceImpl implements ReservaService {
     @Transactional(readOnly = true)
     public ReservaResponse obtenerPorId(Long id) {
         Reserva reserva = reservaRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("No se encontró la reserva con ID " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("No se encontró la reserva con ID: " + id));
+
+        verificarAccesoDocente(reserva);
+
         return mapToResponse(reserva);
+    }
+
+    private void verificarAccesoDocente(Reserva reserva) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated()) {
+            boolean esDocente = auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_DOCENTE"));
+            boolean esBibliotecaria = auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_BIBLIOTECARIA"));
+
+            if (esDocente && !esBibliotecaria) {
+                Long docenteAutenticadoId = docenteResolver.resolverDocenteId(auth.getName());
+                if (!reserva.getDocenteId().equals(docenteAutenticadoId)) {
+                    throw new AccessDeniedException("No tiene permisos para consultar solicitudes de otro docente.");
+                }
+            }
+        }
     }
 
     @Override
     @Transactional
     public ReservaResponse confirmarSolicitud(Long id) {
         Reserva reserva = reservaRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("No se encontró la reserva con ID " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("No se encontró la reserva con ID: " + id));
 
-        // Regla RN-003: Solo se puede confirmar si está en estado PENDIENTE
+        // Regla RN-003: Solo se puede confirmar una solicitud en estado PENDIENTE
         if (reserva.getEstado() != EstadoReserva.PENDIENTE) {
             throw new InvalidStateTransitionException(
                     "Solo se pueden confirmar solicitudes en estado PENDIENTE. Estado actual: " + reserva.getEstado() + "."
@@ -77,17 +151,17 @@ public class ReservaServiceImpl implements ReservaService {
         }
 
         // Regla RN-001: No puede existir más de una reserva CONFIRMADA para el mismo equipo + fecha + módulo
-        boolean existeConfirmada = reservaRepository.existsByEquipoIdAndFechaAndModuloAndEstado(
+        boolean ocupado = reservaRepository.existsByEquipoIdAndFechaAndModuloAndEstado(
                 reserva.getEquipo().getId(),
                 reserva.getFecha(),
                 reserva.getModulo(),
                 EstadoReserva.CONFIRMADA
         );
 
-        if (existeConfirmada) {
+        if (ocupado) {
             throw new ReservaConflictException(
-                    "No es posible confirmar la reserva. Ya existe otra reserva confirmada para el equipo " +
-                            reserva.getEquipo().getId() + " en la fecha " + reserva.getFecha() + " y módulo " + reserva.getModulo() + "."
+                    "No es posible confirmar la reserva. Ya existe otra reserva confirmada para el equipo "
+                            + reserva.getEquipo().getId() + " en la fecha " + reserva.getFecha() + " y módulo " + reserva.getModulo() + "."
             );
         }
 
@@ -100,9 +174,9 @@ public class ReservaServiceImpl implements ReservaService {
     @Transactional
     public ReservaResponse rechazarSolicitud(Long id) {
         Reserva reserva = reservaRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("No se encontró la reserva con ID " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("No se encontró la reserva con ID: " + id));
 
-        // Regla RN-003: Solo se puede rechazar si está en estado PENDIENTE
+        // Regla RN-003: Solo se puede rechazar una solicitud en estado PENDIENTE
         if (reserva.getEstado() != EstadoReserva.PENDIENTE) {
             throw new InvalidStateTransitionException(
                     "Solo se pueden rechazar solicitudes en estado PENDIENTE. Estado actual: " + reserva.getEstado() + "."
@@ -118,8 +192,8 @@ public class ReservaServiceImpl implements ReservaService {
         return new ReservaResponse(
                 reserva.getId(),
                 reserva.getDocenteId(),
-                reserva.getEquipo() != null ? reserva.getEquipo().getId() : null,
-                reserva.getEquipo() != null ? reserva.getEquipo().getNombre() : null,
+                reserva.getEquipo().getId(),
+                reserva.getEquipo().getNombre(),
                 reserva.getFecha(),
                 reserva.getModulo(),
                 reserva.getEstado(),
