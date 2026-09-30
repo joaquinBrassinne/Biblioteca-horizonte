@@ -1,18 +1,15 @@
 package com.biblioteca.horizonte.config;
 
-import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-
-@Configuration
-public class CorsConfig implements WebMvcConfigurer {
-
-    @Override
-    public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/**")
-                .allowedOrigins("http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173")
-                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                .allowedHeaders("*")
-                .allowCredentials(true);
-    }
+/**
+ * La configuración CORS está definida en {@link SecurityConfig#corsConfigurationSource()}.
+ *
+ * Cuando Spring Security está presente, la configuración CORS debe registrarse a través
+ * del {@code CorsConfigurationSource} bean para que Spring Security la aplique ANTES
+ * de evaluar la autenticación. Registrar CORS solo en WebMvcConfigurer no es suficiente
+ * porque Spring Security intercepta la request primero.
+ *
+ * Esta clase se conserva como referencia, pero no está activa.
+ */
+public class CorsConfig {
+    // Ver SecurityConfig.corsConfigurationSource()
 }
