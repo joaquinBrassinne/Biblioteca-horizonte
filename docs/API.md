@@ -56,6 +56,8 @@ En caso de fallos de validación (`HTTP 400 Bad Request`), el atributo `validaci
 | Código de Negocio | HTTP Status | Causa |
 | :--- | :--- | :--- |
 | `DATOS_INVALIDOS` | 400 Bad Request | Violación de Bean Validation (campos faltantes o tipos incompatibles). |
+| `NO_AUTENTICADO` | 401 Unauthorized | Petición sin cabecera `Authorization` o con credenciales inválidas. |
+| `ACCESO_DENEGADO` | 403 Forbidden | El usuario autenticado carece de rol suficiente (`ROLE_BIBLIOTECARIA` o `ROLE_DOCENTE`) o intenta consultar solicitudes ajenas. |
 | `RECURSO_NO_ENCONTRADO` | 404 Not Found | No existe la reserva o equipo con el identificador provisto. |
 | `RESERVA_COLISION_CONFIRMADA` | 409 Conflict | Intento de confirmar una solicitud sobre un slot (equipo + fecha + módulo) que ya posee otra reserva confirmada (**RN-001**). |
 | `TRANSICION_ESTADO_INVALIDA` | 409 Conflict | Intento de confirmar o rechazar una reserva que no está en estado `PENDIENTE` (**RN-003**). |
@@ -264,6 +266,66 @@ Transiciona una solicitud de reserva en estado `PENDIENTE` a estado `RECHAZADA`.
   ```
 - **`404 Not Found`**: La reserva con el ID provisto no existe.
 - **`409 Conflict` (Transición inválida)**: La reserva ya no se encuentra en estado `PENDIENTE` (**RN-003**).
+
+---
+
+#### 4.6. Consultar Mis Solicitudes (Docente)
+Obtiene únicamente las solicitudes registradas por el docente autenticado.
+
+- **Método HTTP:** `GET`
+- **Ruta:** `/api/v1/reservas/mis-solicitudes`
+- **Permiso:** Requiere rol `ROLE_DOCENTE`.
+- **Requerimientos asociados:** RF09, ADR-011
+
+##### Respuestas:
+- **`200 OK`**: Lista de solicitudes pertenecientes al docente autenticado.
+- **`401 Unauthorized`**: Usuario no autenticado.
+- **`403 Forbidden`**: El usuario autenticado no posee rol `ROLE_DOCENTE`.
+
+---
+
+#### 4.7. Consultar Reservas Confirmadas
+Filtra y devuelve exclusivamente las reservas en estado `CONFIRMADA` por equipo y/o fecha.
+
+- **Método HTTP:** `GET`
+- **Ruta:** `/api/v1/reservas/confirmadas`
+- **Requerimientos asociados:** RF10, ADR-012
+
+##### Parámetros de Consulta (Query Params):
+- `equipoId` *(opcional)*: Identificador del equipo.
+- `fecha` *(opcional)*: Fecha en formato ISO (`YYYY-MM-DD`).
+
+##### Respuestas:
+- **`200 OK`**: Lista de reservas confirmadas que coinciden con los criterios de búsqueda.
+
+---
+
+#### 4.8. Consultar Auditoría de una Reserva
+Obtiene el historial inmutable de trazabilidad de operaciones de confirmación y rechazo para una reserva específica.
+
+- **Método HTTP:** `GET`
+- **Ruta:** `/api/v1/reservas/{id}/auditoria`
+- **Permiso:** Requiere rol `ROLE_BIBLIOTECARIA`.
+- **Requerimientos asociados:** RF11, RNF06, HU-010, HU-011, ADR-010
+
+##### Parámetros de Ruta:
+- `id` (Long, obligatorio): Identificador de la reserva.
+
+##### Respuestas:
+- **`200 OK`**: Lista de registros de auditoría.
+  ```json
+  [
+    {
+      "id": 1,
+      "reservaId": 101,
+      "usuario": "bibliotecaria",
+      "operacion": "CONFIRMAR",
+      "fechaHora": "2026-10-05T14:30:00Z",
+      "resultado": "EXITOSO"
+    }
+  ]
+  ```
+- **`403 Forbidden`**: El usuario no posee rol `ROLE_BIBLIOTECARIA`.
 
 ---
 

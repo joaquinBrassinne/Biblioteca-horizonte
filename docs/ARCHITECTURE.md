@@ -17,27 +17,40 @@ backend/
     │   │       └── biblioteca/
     │   │           └── horizonte/
     │   │               ├── BibliotecaHorizonteApplication.java
+    │   │               ├── config/
+    │   │               │   ├── SecurityConfig.java
+    │   │               │   └── CorsConfig.java
     │   │               ├── controller/
     │   │               │   ├── ReservaController.java
-    │   │               │   └── EquipoController.java
+    │   │               │   ├── EquipoController.java
+    │   │               │   └── HealthController.java
     │   │               ├── service/
     │   │               │   ├── ReservaService.java
+    │   │               │   ├── AuditoriaService.java
     │   │               │   └── impl/
-    │   │               │       └── ReservaServiceImpl.java
+    │   │               │       ├── ReservaServiceImpl.java
+    │   │               │       └── AuditoriaServiceImpl.java
     │   │               ├── repository/
     │   │               │   ├── ReservaRepository.java
-    │   │               │   └── EquipoRepository.java
-    │   │               ├── model/
+    │   │               │   ├── EquipoRepository.java
+    │   │               │   └── AuditoriaReservaRepository.java
+    │   │               ├── entity/
     │   │               │   ├── Reserva.java
     │   │               │   ├── Equipo.java
     │   │               │   ├── Docente.java
+    │   │               │   ├── AuditoriaReserva.java
     │   │               │   └── EstadoReserva.java
+    │   │               ├── security/
+    │   │               │   ├── DocenteResolver.java
+    │   │               │   ├── RestAccessDeniedHandler.java
+    │   │               │   └── RestAuthenticationEntryPoint.java
     │   │               ├── dto/
     │   │               │   ├── request/
     │   │               │   │   └── CrearReservaRequest.java
     │   │               │   └── response/
     │   │               │       ├── ReservaResponse.java
     │   │               │       ├── EquipoResponse.java
+    │   │               │       ├── AuditoriaResponse.java
     │   │               │       └── ErrorResponse.java
     │   │               └── exception/
     │   │                   ├── GlobalExceptionHandler.java
@@ -48,18 +61,25 @@ backend/
     │       ├── application.properties
     │       ├── application-dev.properties
     │       ├── application-prod.properties
-    │       └── data.sql
+    │       ├── data-h2.sql
+    │       ├── schema-h2.sql
+    │       ├── data-postgres.sql
+    │       └── schema-postgres.sql
     └── test/
         └── java/
             └── com/
                 └── biblioteca/
                     └── horizonte/
                         ├── controller/
-                        │   └── ReservaControllerTest.java
+                        │   ├── ReservaControllerIntegrationTest.java
+                        │   └── HealthControllerTest.java
                         ├── service/
                         │   └── ReservaServiceTest.java
-                        └── repository/
-                            └── ReservaRepositoryTest.java
+                        ├── repository/
+                        │   └── ReservaRepositoryTest.java
+                        └── integration/
+                            ├── ReservaIntegrationTest.java
+                            └── AuditoriaIntegrationTest.java
 ```
 
 ---
@@ -126,39 +146,54 @@ frontend/
 
 ---
 
-### 4. Entidades
+### 4. Entidades y Modelos de Seguridad
 
 #### **`Reserva` (Entidad principal)**
 - Mapea la tabla `reservas`.
 - Atributos:
   - `Long id`: Clave primaria autoincremental.
-  - `Long docenteId`: Identificador del docente solicitante.
-    *[DECISIÓN PENDIENTE: Definir si se vincula como entidad `@ManyToOne Docente` o si se almacena únicamente como identificador numérico/legajo en el MVP].*
+  - `Long docenteId`: Identificador del docente solicitante, mapeado a la entidad `Docente` correspondiente mediante `DocenteResolver`.
   - `Equipo equipo`: Relación `@ManyToOne(optional = false)` con la entidad `Equipo`.
   - `LocalDate fecha`: Fecha de calendario para la reserva.
-  - `String modulo`: Módulo horario solicitado.
-    *[DECISIÓN PENDIENTE: Definir si el módulo es texto libre o un Enum tipado con horarios institucionales predefinidos (ej. M1, M2)].*
+  - `String modulo`: Módulo horario solicitado (ej. `"M1"`, `"M2"`).
   - `EstadoReserva estado`: Enumeración (`PENDIENTE`, `CONFIRMADA`, `RECHAZADA`).
   - `LocalDateTime fechaCreacion`: Marca temporal generada al persistir la solicitud.
+  - `List<AuditoriaReserva> auditorias`: Relación `@OneToMany` para registro de trazabilidad histórica de confirmaciones y rechazos.
 
 #### **`Equipo` (Entidad de recurso)**
 - Mapea la tabla `equipos`.
 - Atributos:
   - `Long id`: Clave primaria.
-  - `String nombre`: Denominación del equipo (ej: "Proyector EPSON Aula Magna", "Carro de Tablets #2").
-    *[DECISIÓN PENDIENTE: Definir si el equipo contiene más atributos como código de inventario, estado operativo o categoría].*
+  - `String nombre`: Denominación del equipo (ej: "Proyector EPSON Aula Magna", "Carro de Tablets #1").
 
 #### **`Docente` (Entidad referencial)**
-- *[DECISIÓN PENDIENTE: El requerimiento no especifica gestión de usuarios/login. Se sugiere tabla referencial mínima para listar docentes en el formulario del MVP].*
+- Mapea la tabla `docentes`.
 - Atributos:
-  - `Long id`: Clave primaria.
-  - `String nombre`: Nombre completo del docente.
+  - `Long id`: Clave primaria autoincremental.
+  - `String nombre`: Nombre completo del docente (ej. "Prof. Juan Pérez").
+
+#### **`AuditoriaReserva` (Entidad de trazabilidad)**
+- Mapea la tabla `auditoria_reservas`.
+- Atributos:
+  - `Long id`: Clave primaria autoincremental.
+  - `Reserva reserva`: Relación `@ManyToOne(optional = false)` con la reserva auditada.
+  - `String usuario`: Nombre del usuario que ejecutó la acción (ej: `"bibliotecaria"`).
+  - `String operacion`: Tipo de operación ejecutada (`"CONFIRMAR"` o `"RECHAZAR"`).
+  - `LocalDateTime fechaHora`: Marca temporal exacta del evento.
+  - `String resultado`: Resultado de la operación (`"EXITOSO"`).
 
 #### **`EstadoReserva` (Enum)**
 - Valores posibles:
-  - `PENDIENTE`: Estado inicial de toda solicitud.
+  - `PENDIENTE`: Estado inicial obligatorio de toda solicitud.
   - `CONFIRMADA`: Reserva aprobada y con slot asignado exclusivamente.
   - `RECHAZADA`: Solicitud descartada.
+
+#### **Modelos de Autenticación y Roles (Spring Security)**
+- **Mecanismo:** HTTP Basic Stateless (`SecurityConfig.java`).
+- **Roles:**
+  - `ROLE_DOCENTE`: Asignado a usuarios docentes (ej: `docente1`, `docente2`). Permite emitir solicitudes y consultar las solicitudes propias (`/mis-solicitudes`).
+  - `ROLE_BIBLIOTECARIA`: Asignado al usuario administrativo (`bibliotecaria`). Permite confirmar (`/confirmar`), rechazar (`/rechazar`), consultar todas las reservas y revisar auditorías.
+- **Resolución de Identidad:** `DocenteResolver.java` mapea el `username` del usuario docente con su `docenteId` numérico en la base de datos.
 
 ---
 
@@ -317,20 +352,27 @@ En `CrearReservaRequest`:
 
 *(El detalle exhaustivo de payloads, códigos y cabeceras se encuentra documentado en [API.md](file:///c:/Users/Usuario/Desktop/proyecto/Biblioteca-horizonte/docs/API.md)).*
 
-| Endpoint | Método | Descripción | Códigos HTTP |
-| :--- | :--- | :--- | :--- |
-| `/api/v1/reservas` | `POST` | Crea una solicitud en estado `PENDIENTE` | 201, 400, 404 |
-| `/api/v1/reservas` | `GET` | Lista las solicitudes de reserva | 200 |
-| `/api/v1/reservas/{id}` | `GET` | Obtiene el detalle de una solicitud | 200, 404 |
-| `/api/v1/reservas/{id}/confirmar` | `POST` | Confirma una solicitud pendiente | 200, 404, 409 |
-| `/api/v1/reservas/{id}/rechazar` | `POST` | Rechaza una solicitud pendiente | 200, 404, 409 |
-| `/api/v1/equipos` | `GET` | Lista los equipos para selector UI | 200 |
+| Endpoint | Método | Rol Requerido | Descripción | Códigos HTTP |
+| :--- | :--- | :--- | :--- | :--- |
+| `/api/v1/reservas` | `POST` | Autenticado (`DOCENTE`) | Crea una solicitud en estado `PENDIENTE` | 201, 400, 404 |
+| `/api/v1/reservas` | `GET` | Autenticado | Lista las solicitudes (filtrado por docente si es DOCENTE) | 200, 403 |
+| `/api/v1/reservas/mis-solicitudes` | `GET` | `ROLE_DOCENTE` | Consulta las solicitudes propias del docente autenticado | 200, 401, 403 |
+| `/api/v1/reservas/confirmadas` | `GET` | Autenticado | Consulta asignaciones efectivas filtrando por recurso/fecha | 200, 401 |
+| `/api/v1/reservas/{id}` | `GET` | Autenticado | Obtiene el detalle de una solicitud puntual | 200, 403, 404 |
+| `/api/v1/reservas/{id}/confirmar` | `POST` | `ROLE_BIBLIOTECARIA` | Confirma una solicitud pendiente | 200, 403, 404, 409 |
+| `/api/v1/reservas/{id}/rechazar` | `POST` | `ROLE_BIBLIOTECARIA` | Rechaza una solicitud pendiente | 200, 403, 404, 409 |
+| `/api/v1/reservas/{id}/auditoria` | `GET` | `ROLE_BIBLIOTECARIA` | Obtiene el historial de auditoría de una reserva | 200, 403, 404 |
+| `/api/v1/equipos` | `GET` | Público | Lista los equipos para selector UI | 200 |
 
 ---
 
 ### 12. Modelo de Base de Datos Relacional
 
 #### **Tabla `equipos`**
+- `id` BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY
+- `nombre` VARCHAR(120) NOT NULL
+
+#### **Tabla `docentes`**
 - `id` BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY
 - `nombre` VARCHAR(120) NOT NULL
 
@@ -345,8 +387,23 @@ En `CrearReservaRequest`:
 - **Foreign Key:** `fk_reservas_equipo` (`equipo_id`) REFERENCES `equipos`(`id`)
 - **Índice de búsqueda:** `idx_reservas_slot` (`equipo_id`, `fecha`, `modulo`, `estado`)
 
+#### **Tabla `auditoria_reservas`**
+- `id` BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY
+- `reserva_id` BIGINT NOT NULL
+- `usuario` VARCHAR(100) NOT NULL
+- `operacion` VARCHAR(50) NOT NULL
+- `fecha_hora` TIMESTAMP NOT NULL
+- `resultado` VARCHAR(50) NOT NULL
+- **Foreign Key:** `fk_auditoria_reserva` (`reserva_id`) REFERENCES `reservas`(`id`) ON DELETE CASCADE
+- **Índice de búsqueda:** `idx_auditoria_reserva_id` (`reserva_id`)
+
 ```sql
 CREATE TABLE equipos (
+    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    nombre VARCHAR(120) NOT NULL
+);
+
+CREATE TABLE docentes (
     id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
     nombre VARCHAR(120) NOT NULL
 );
@@ -362,16 +419,32 @@ CREATE TABLE reservas (
     CONSTRAINT fk_reservas_equipo FOREIGN KEY (equipo_id) REFERENCES equipos(id),
     CONSTRAINT chk_reservas_estado CHECK (estado IN ('PENDIENTE', 'CONFIRMADA', 'RECHAZADA'))
 );
+
+CREATE TABLE auditoria_reservas (
+    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    reserva_id BIGINT NOT NULL,
+    usuario VARCHAR(100) NOT NULL,
+    operacion VARCHAR(50) NOT NULL,
+    fecha_hora TIMESTAMP NOT NULL,
+    resultado VARCHAR(50) NOT NULL,
+    CONSTRAINT fk_auditoria_reserva FOREIGN KEY (reserva_id) REFERENCES reservas(id) ON DELETE CASCADE
+);
 ```
 
 ---
 
 ### 13. Relaciones entre Entidades
 
+El siguiente diagrama Entidad-Relación integra el modelo de datos de negocio, el registro de auditoría y la capa de autenticación/roles (`ROLE_DOCENTE` / `ROLE_BIBLIOTECARIA`):
+
 ```mermaid
 erDiagram
     EQUIPO ||--o{ RESERVA : "es asignado en"
-    DOCENTE ||--o{ RESERVA : "solicita"
+    DOCENTE ||--o{ RESERVA : "solicita (docente_id)"
+    RESERVA ||--o{ AUDITORIA_RESERVA : "registra trazabilidad en"
+    USUARIO }|--|| ROL : "posee rol"
+    USUARIO ||--o| DOCENTE : "mapea identidad via DocenteResolver"
+    USUARIO ||--o{ AUDITORIA_RESERVA : "ejecuta operacion"
 
     EQUIPO {
         bigint id PK
@@ -392,10 +465,34 @@ erDiagram
         varchar estado
         timestamp fecha_creacion
     }
+
+    AUDITORIA_RESERVA {
+        bigint id PK
+        bigint reserva_id FK
+        varchar usuario
+        varchar operacion
+        timestamp fecha_hora
+        varchar resultado
+    }
+
+    USUARIO {
+        string username PK
+        string password
+        string rol_nombre FK
+    }
+
+    ROL {
+        string nombre PK
+    }
 ```
 
-- Relación `Equipo` a `Reserva`: Uno a Muchos (`1:N`). Un equipo puede estar vinculado a múltiples solicitudes históricas o pendientes, pero solo a una confirmada por fecha y módulo.
-- Relación `Docente` a `Reserva`: Uno a Muchos (`1:N`).
+- **Relación `Equipo` a `Reserva` (`1:N`):** Un equipo puede estar asociado a múltiples solicitudes de reserva. La regla **RN-001** restringe que solo pueda existir **una sola reserva confirmada** por cada combinación de equipo, fecha y módulo.
+- **Relación `Docente` a `Reserva` (`1:N`):** Un docente puede registrar múltiples solicitudes. La identidad del docente autenticado es asociada automáticamente al `docenteId` mediante el componente `DocenteResolver`.
+- **Relación `Reserva` a `AuditoriaReserva` (`1:N`):** Cada operación crítica de confirmación o rechazo sobre una reserva genera una entrada inmutable de trazabilidad en la tabla `auditoria_reservas`.
+- **Relación `Usuario` a `Rol` (`M:1`):** Cada usuario que interactúa con la API posee un rol de seguridad (definido en Spring Security via `SecurityConfig`):
+  - **`ROLE_DOCENTE`:** Permite crear solicitudes y consultar únicamente las reservas propias (`/mis-solicitudes`).
+  - **`ROLE_BIBLIOTECARIA`:** Permite a la bibliotecaria (Lucía) supervisar todas las solicitudes, ejecutar transiciones de confirmación y rechazo, consultar asignaciones confirmadas y acceder al log de auditoría.
+- **Relación `Usuario` a `AuditoriaReserva` (`1:N`):** El nombre del usuario autenticado (`SecurityContextHolder`) queda grabado de forma inalterable en la auditoría al realizar acciones administrativas.
 
 ---
 
@@ -558,8 +655,8 @@ Pirámide de pruebas simple y orientada a los criterios de aceptación:
    Actualmente se modela como `String` (ej. `"M1"`, `"08:00-09:30"`). Se requiere confirmación si debe ser un catálogo de módulos predefinido con horas de inicio y fin.
 2. **`[DECISIÓN PENDIENTE]` Motor RDBMS para Producción:**
    Para aplicar el índice condicional `WHERE estado = 'CONFIRMADA'` sin complejidad adicional, se recomienda **PostgreSQL**. Si se utiliza MySQL tradicional, se deberá recurrir a un bloqueo pesimista en la capa de servicio.
-3. **`[DECISIÓN PENDIENTE]` Entidad y Autenticación del Docente:**
-   En este MVP se recibe `docenteId` numérico en el request. No se implementa Spring Security con JWT/sesiones en esta fase por no estar en el requerimiento.
+3. **`[RESUELTO]` Entidad y Autenticación del Docente:**
+   Implementado mediante Spring Security HTTP Basic y control de acceso basado en roles (`ROLE_DOCENTE` y `ROLE_BIBLIOTECARIA`). El componente `DocenteResolver` mapea automáticamente el usuario autenticado (`docente1`, `docente2`) con su identificador interno (`docenteId`), y aísla las consultas del docente a sus propias solicitudes (`/mis-solicitudes`).
 4. **`[DECISIÓN PENDIENTE]` Comportamiento automático con reservas pendientes superpuestas:**
    Al confirmar la reserva A para un slot, ¿las solicitudes B y C que competían por el mismo slot deben pasar automáticamente a `RECHAZADA`, o deben permanecer en `PENDIENTE` hasta ser rechazadas manualmente? En la arquitectura actual se mantienen en `PENDIENTE` y fallarán con 409 si alguien intenta confirmarlas.
 5. **`[DECISIÓN PENDIENTE]` Validación de Fechas Pasadas:**
